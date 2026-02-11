@@ -116,7 +116,7 @@ local Slice = function(
 		return out
 	end
 	
-	local out = table.create(sliceSize)
+	local out = Buffers.AcquireTable()
 	table.move(buf, 1, sliceSize, 1, out)
 	
 	local newLen = len - sliceSize
@@ -136,7 +136,9 @@ local free = function(slice: Array<Buffer>)
 		Buffers.Release(slice[i])
 	end
 	TotalBuffers -= #slice
+	Buffers.ReleaseTable(slice)
 end
+
 
 local Merge = function(id: number, bufs: Array<Buffer>): buffer
 	local size = 0
@@ -280,6 +282,7 @@ if IS_SERVER then
 		while cursor < maxLen do
 			local newCursor, data = deserializer(cursor, buf)
 
+
 			if newCursor > maxLen then
 				warn("[Graphite] cursor overflow in packet, packet droped")
 				return
@@ -293,6 +296,7 @@ if IS_SERVER then
 			cursor = newCursor
 
 			Dispatch.CallListener(eventId, player, table.unpack(data))
+			Buffers.ReleaseTable(data)	
 		end
 	end)
 else
@@ -386,6 +390,7 @@ else
 			cursor = newCursor
 
 			Dispatch.CallListener(eventId, table.unpack(data))
+			Buffers.ReleaseTable(data)		
 		end
 	end)
 end
