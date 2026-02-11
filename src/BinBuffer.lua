@@ -759,7 +759,6 @@ writers[36] = function(buf: Buffer, tbl: {[any]: any}): boolean
 		local valueTypeId = TypeToId[valueType]
 		if not valueTypeId then error("Unsupported value type: "..valueType) end
 		
-		print(valueType, valueTypeId)
 		
 		writers[2](buf, valueTypeId)
 		ToWriter[valueType](buf, value)
