@@ -350,8 +350,10 @@ else
 					Targets[index] = Targets[last]
 					Id[index] = Id[last]
 					Index[Id[index]][Targets[index] :: Target] = index
+					IsDroppable[index] = IsDroppable[last]
 				end
 
+				IsDroppable[index] = NULL
 				Queue[last] = NULL
 				Targets[last] = NULL
 				Id[last] = EMPTY
