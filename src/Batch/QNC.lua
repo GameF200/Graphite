@@ -138,8 +138,8 @@ return function(
 		end
 		
 		pidBoost = math.clamp(pidBoost + 0.1, 1, pidBoostMax)
-		budget = math.min(budgetMax, budget * (1 + pidBoost * 0.1))
-		sliceSize = math.min(sliceMax, sliceSize * (1 + pidBoost * 0.1))
+		budget = math.min(budgetMax, budget * (1 + pidBoost * 0.2))
+		sliceSize = math.min(sliceMax, sliceSize * (1 + pidBoost * 0.2))
 
 		if now >= firstAboveTime then
 			if now >= nextDropTime then
@@ -150,7 +150,7 @@ return function(
 
 				local overload = (delay - CoDelTarget) / CoDelTarget
 				dropPackets = math.clamp(
-					math.floor(overload * (3 ^ dropCount)),
+					math.floor(overload * (2.5 ^ dropCount)),
 					1,
 					math.floor(Count * 0.5)
 				)
