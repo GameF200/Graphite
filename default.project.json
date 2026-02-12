@@ -1,0 +1,9 @@
+{
+  "name": "Graphite",
+  "tree": {
+    "$className": "Folder",
+    "src": {
+      "$path": "src"
+    }
+  }
+}
