@@ -6,11 +6,18 @@
 	@author super_sonic
 --]]
 
-local target = 0.01      -- 60ms
-local maxDelay = 0.1    -- hard ceiling 100ms
+local GetRtt = require("./RTT")
 
-local CoDelTarget = target
-local CoDelInterval = 0.04
+local RunService = game:GetService("RunService")
+local IS_SERVER = RunService:IsServer()
+
+local baseRTT = math.huge
+   
+local maxDelay = 0.1    
+
+local target = 0.005
+local CoDelTarget = 0.005
+local CoDelInterval = 0.005
 
 local firstAboveTime = 0
 local dropCount = 0
@@ -19,7 +26,9 @@ local nextDropTime = 0
 local dropPackets = 0
 
 local pidBoost = 0
-local pidBoostMax = 2.0
+local pidBoostMax = 3.0
+
+local rttEMA = 0
 
 local Kp = 8
 local Ki = 2
@@ -51,6 +60,24 @@ local lastArrivalRate = 0
 local needDrop = false
 local dropPackets = 0
 
+local function UpdateFromRTT(rtt: number)
+	if rtt <= 0 then return end
+	if rtt > 0.5 then return end 
+
+	baseRTT = math.min(baseRTT, rtt)
+
+	if rttEMA == 0 then
+		rttEMA = rtt
+	else
+		rttEMA = rttEMA * 0.8 + rtt * 0.2
+	end
+
+	local targetTime = math.clamp(baseRTT * 1.1 + 0.001, 0.003, 0.05)
+	local codelTarget = targetTime
+	local codelInterval = math.clamp(baseRTT * 0.005, 0.01, 0.05)
+	return targetTime, codelTarget, codelInterval
+end
+
 return function(
 	Count: number,
 	DeltaCount: number,
@@ -59,6 +86,21 @@ return function(
 )
 	needDrop = false
 	dropPackets = 0
+	
+	if not IS_SERVER then
+		local CurrentRTT = GetRtt()
+		local newTarget, newCoDelTarget, newCoDelInterval = UpdateFromRTT(CurrentRTT)
+
+		if newTarget then
+			target = target * 0.8 + newTarget * 0.2
+			CoDelTarget = CoDelTarget * 0.8 + newCoDelTarget * 0.2
+			CoDelInterval = CoDelInterval * 0.5 + newCoDelInterval * 0.1
+		end
+	end
+
+	print(TotalTime)
+
+	--print(" CoDelTarget ".. CoDelTarget .. " CoDelInterval ".. CoDelInterval.. " Target(PID) ".. target)
 	
 	-- PID Part
 	local dt = math.max(DeltaTime, 1e-3)
@@ -128,7 +170,7 @@ return function(
 
 	lastDelay = delay
 	
-	local now = TotalTime
+	local now = time()
 	
 	-- CoDel part
 	if delay > CoDelTarget then
@@ -150,9 +192,9 @@ return function(
 
 				local overload = (delay - CoDelTarget) / CoDelTarget
 				dropPackets = math.clamp(
-					math.floor(overload * (2.5 ^ dropCount)),
+					math.floor(overload * (2.25 ^ dropCount)),
 					1,
-					math.floor(Count * 0.5)
+					math.floor(Count * 0.25) -- 25% of the queue is max
 				)
 			end
 		end

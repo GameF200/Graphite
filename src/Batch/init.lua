@@ -306,6 +306,8 @@ else
 			return
 		end
 
+		TotalTime += DeltaTime
+
 		local newBudget, newSize, needDrop, dropAmount = QNC(
 			TotalBuffers,
 			TotalBuffers - LastTotalBuffers,
@@ -365,6 +367,7 @@ else
 			
 				Count -= 1
 				LastTotalBuffers = 0
+				TotalTime = 0
 			else
 				index -= 1
 			end
