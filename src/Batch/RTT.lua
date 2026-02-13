@@ -27,23 +27,23 @@ local totalTime = 0
 local seq = 0
 
 if IS_SERVER then
-	Remote.OnServerEvent:Connect(function(player, sendTime, seqId)
-		if typeof(sendTime) ~= "number" then return end
-		if typeof(seqId) ~= "number" then return end
-
-		Remote:FireClient(player, sendTime, seqId)
+	Remote.OnServerEvent:Connect(function(player, buf: buffer)
+		Remote:FireClient(player, buf)
 	end)
 end
 
 if not IS_SERVER then
 	seq += 1
 	lastSendTime = time()
-	Remote:FireServer(lastSendTime, seq)
+	local buf = buffer.create(8)
+	buffer.writef32(buf, 0, lastSendTime)
+	buffer.writeu32(buf, 4, seq)
+	Remote:FireServer(buf)
 	
-	Remote.OnClientEvent:Connect(function(sendTime, seqId)
-		if typeof(sendTime) ~= "number" then return end
-		if typeof(seqId) ~= "number" then return end
-
+	Remote.OnClientEvent:Connect(function(buf)
+		local sendTime = buffer.readf32(buf, 0)
+		
+	
 		local now = time()
 		local rtt = now - sendTime
 
@@ -54,6 +54,7 @@ if not IS_SERVER then
 		else
 			lastRttEma = lastRttEma * (1 - EMA_ALPHA) + rtt * EMA_ALPHA
 		end
+		print(lastRttEma)
 	end)
 	
 	RunService.Heartbeat:Connect(function(dt)
@@ -62,7 +63,10 @@ if not IS_SERVER then
 			totalTime = 0
 			seq += 1
 			lastSendTime = time()
-			Remote:FireServer(lastSendTime, seq)
+			local buf = buffer.create(8)
+			buffer.writef32(buf, 0, lastSendTime)
+			buffer.writeu32(buf, 4, seq)
+			Remote:FireServer(buf)
 		end
 	end)
 end
