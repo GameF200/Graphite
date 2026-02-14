@@ -98,7 +98,7 @@ return function(
 		end
 	end
 
-	print(TotalTime)
+	--print(TotalTime)
 
 	--print(" CoDelTarget ".. CoDelTarget .. " CoDelInterval ".. CoDelInterval.. " Target(PID) ".. target)
 	
@@ -121,6 +121,12 @@ return function(
 	local burst =
 		arrivalRateEMA > drainRateEMA * 1.3 or
 		accel > spikeThreshold
+
+	if delay > maxDelay
+		and accel > spikeThreshold
+		and arrivalRateEMA > drainRateEMA * 2 then
+		panic = true
+	end
 
 	local congestion =
 		delay > maxDelay or
@@ -164,6 +170,8 @@ return function(
 		integral = integral * 0.9
 	end
 
+	
+
 	--print("DEBUG QNC".. budget, sliceSize)
 	budget = math.clamp(budget, budgetMin, budgetMax)
 	sliceSize = math.clamp(sliceSize, sliceMin, sliceMax)
@@ -171,6 +179,8 @@ return function(
 	lastDelay = delay
 	
 	local now = time()
+	
+	
 	
 	-- CoDel part
 	if delay > CoDelTarget then
@@ -191,10 +201,26 @@ return function(
 				needDrop = true
 
 				local overload = (delay - CoDelTarget) / CoDelTarget
+
+				local baseDrop = overload * 2
+
+				local k = math.clamp(dropCount, 0, 6)
+				local expDrop
+				if overload > 2 and panic then
+					expDrop = math.ldexp(baseDrop, k) -- baseDrop * 2^dropCount
+				else
+					expDrop = baseDrop * (2.25 ^ dropCount)
+				end
+
 				dropPackets = math.clamp(
-					math.floor(overload * (2.25 ^ dropCount)),
+					math.ceil(expDrop),
 					1,
-					math.floor(Count * 0.25) -- 25% of the queue is max
+					math.floor(
+						if panic then
+							Count * 0.35
+						else
+							Count * 0.25
+					)
 				)
 			end
 		end
@@ -207,5 +233,7 @@ return function(
 		dropPackets = 0
 	end
 
-	return math.floor(budget), math.floor(sliceSize), needDrop, dropPackets
+	
+	--print(Count, dropPackets)
+	return math.ceil(budget), math.ceil(sliceSize), needDrop, dropPackets
 end

@@ -110,12 +110,13 @@ local function Alloc(buf: Buffer, requiredBytes: number): boolean
 	return true
 end
 
+local FP_NAN = 0x7C01
 local function WriteF16Data(buf: buffer, offset: number, value: number)
 	local bitOffset = offset * 8
 	if value == 0 then
 		buffer_writebits(buf, bitOffset, 16, 0)
 	elseif value ~= value then
-		buffer_writebits(buf, bitOffset, 16, 31745)
+		buffer_writebits(buf, bitOffset, 16, FP_NAN)
 	else
 		local sign = 0
 		if value < 0 then 
@@ -130,19 +131,31 @@ local function WriteF16Data(buf: buffer, offset: number, value: number)
 end
 
 local function WriteU24Data(buf: buffer, offset: number, value: number)
-	local bitOffset = offset * 8
-	buffer_writebits(buf, bitOffset, 24, value)
+	value = bit32.band(value, 0xFFFFFF)
+
+	local low16 = bit32.band(value, 0xFFFF)       
+	local high8 = bit32.rshift(value, 16)          
+
+	buffer_writeu16(buf, offset, low16)             
+	buffer_writeu8(buf, offset + 2, high8)
 end
 
+
 local function WriteI24Data(buf: buffer, offset: number, value: number)
-	local bitOffset = offset * 8
 	local unsignedValue
 	if value < 0 then
-		unsignedValue = (bit32.lshift(1, 24)) + value  
+		unsignedValue = bit32.lshift(1, 24) + value  
 	else
 		unsignedValue = value
 	end
-	buffer_writebits(buf, bitOffset, 24, unsignedValue)
+
+	unsignedValue = bit32.band(unsignedValue, 0xFFFFFF)
+
+	local low16 = bit32.band(unsignedValue, 0xFFFF)
+	local high8 = bit32.rshift(unsignedValue, 16)
+
+	buffer_writeu16(buf, offset, low16)
+	buffer_writeu8(buf, offset + 2, high8)
 end
 
 local function ReadF16(buf: buffer, offset: number): number
@@ -158,7 +171,7 @@ local function ReadF16(buf: buffer, offset: number): number
 		return 0/0
 	end
 
-	local value = (mantissa / 1024 + 1) * 2 ^ (exponent - 15)
+	local value = math.ldexp(mantissa / 1024 + 1, exponent - 15)
 	return sign == 0 and value or -value
 end
 
@@ -175,20 +188,26 @@ local function ReadF24(buf: buffer, offset: number): number
 		return 0/0
 	end
 
-	local value = (mantissa / 131072 + 1) * 2 ^ (exponent - 31)
+	local value = math.ldexp(mantissa / 131072 + 1, exponent - 31)
 	return sign == 0 and value or -value
 end
 
 local function ReadU24(buf: buffer, offset: number): number
-	local bitOffset = offset * 8
-	return buffer_readbits(buf, bitOffset, 24)
+	local low16 = buffer_readu16(buf, offset)   
+	local high8 = buffer_readu8(buf, offset + 2)  
+
+	return bit32.bor(low16, bit32.lshift(high8, 16))
 end
 
+
 local function ReadI24(buf: buffer, offset: number): number
-	local bitOffset = offset * 8
-	local unsignedValue = buffer_readbits(buf, bitOffset, 24)
-	if unsignedValue >= (bit32.lshift(1, 23)) then
-		return unsignedValue - (bit32.lshift(1, 24)) 
+	local low16 = buffer_readu16(buf, offset)
+	local high8 = buffer_readu8(buf, offset + 2)
+
+	local unsignedValue = bit32.bor(low16, bit32.lshift(high8, 16))
+
+	if unsignedValue >= bit32.lshift(1, 23) then
+		return unsignedValue - bit32.lshift(1, 24)
 	else
 		return unsignedValue
 	end
@@ -768,6 +787,18 @@ writers[36] = function(buf: Buffer, tbl: {[any]: any}): boolean
 	return true
 end
 
+writers[37] = function(buf: Buffer, value: string): boolean
+	local len = string_len(value)
+	local requiredBytes = 1 + len
+	if buf._writeOffset + requiredBytes > buffer_len(buf._buffer) then
+		if not Alloc(buf, requiredBytes) then return false end
+	end
+	buffer_writeu8(buf._buffer, buf._writeOffset, len)
+	buffer_writestring(buf._buffer, buf._writeOffset + 1, value)
+	buf._writeOffset += requiredBytes
+	return true
+end
+
 readers[1] = function(buf: buffer, offset: number): (number, boolean?)
 	if offset + 1 > buffer_len(buf) then
 		return 0, nil
@@ -1198,6 +1229,21 @@ readers[36] = function(buf: buffer, offset: number): (number, {[any]: any}?)
 
 		result[key] = value
 	end
+end
+
+readers[37] = function(buf :buffer, offset: number): (number, string?)
+	if offset + 1 > buffer_len(buf) then
+		return 0, nil
+	end
+
+	local length = buffer_readu8(buf, offset)
+
+	if offset + 1 + length > buffer_len(buf) then
+		return 0, nil
+	end
+
+	local value = buffer_readstring(buf, offset + 1, length)
+	return 1 + length, value
 end
 
 -- creates a basic buffer from BinBuffer
